@@ -1,5 +1,9 @@
+from datetime import datetime
+
 from sqlalchemy.orm import Session
+
 from app.models.ledger import LedgerBlock, GENESIS_HASH
+
 
 def append_to_ledger(
     db: Session,
@@ -10,8 +14,7 @@ def append_to_ledger(
     payload: dict
 ) -> LedgerBlock:
     """Creates, hashes, and appends a new block to the workspace ledger chain."""
-    
-    # Get the latest block in the chain for this workspace
+
     last_block = (
         db.query(LedgerBlock)
         .filter(LedgerBlock.workspace_id == workspace_id)
@@ -26,8 +29,10 @@ def append_to_ledger(
         next_index = 0
         prev_hash = GENESIS_HASH
 
-    # Compute block hash deterministically
-    timestamp_str = LedgerBlock().timestamp or ""
+    # Generate the timestamp once and use the same value for
+    # both the hash calculation and the stored ledger block.
+    timestamp_str = datetime.utcnow().isoformat()
+
     current_hash = LedgerBlock.compute_sha256(
         index=next_index,
         prev_hash=prev_hash,
@@ -44,6 +49,7 @@ def append_to_ledger(
         actor_id=actor_id,
         action_type=action_type,
         payload=payload,
+        timestamp=timestamp_str,
         previous_hash=prev_hash,
         current_hash=current_hash
     )
@@ -51,11 +57,13 @@ def append_to_ledger(
     db.add(new_block)
     db.commit()
     db.refresh(new_block)
+
     return new_block
 
 
 def verify_chain_integrity(db: Session, workspace_id: str) -> dict:
     """Audits the ledger for tampered records or broken hash links."""
+
     blocks = (
         db.query(LedgerBlock)
         .filter(LedgerBlock.workspace_id == workspace_id)
@@ -64,11 +72,15 @@ def verify_chain_integrity(db: Session, workspace_id: str) -> dict:
     )
 
     if not blocks:
-        return {"status": "EMPTY", "message": "No ledger blocks found for workspace."}
+        return {
+            "status": "EMPTY",
+            "message": "No ledger blocks found for workspace."
+        }
 
     expected_prev_hash = GENESIS_HASH
 
     for block in blocks:
+
         # Check chain link
         if block.previous_hash != expected_prev_hash:
             return {
@@ -77,7 +89,7 @@ def verify_chain_integrity(db: Session, workspace_id: str) -> dict:
                 "reason": "Previous hash mismatch"
             }
 
-        # Verify hash calculation
+        # Recalculate the block hash
         computed_hash = LedgerBlock.compute_sha256(
             index=block.index,
             prev_hash=block.previous_hash,
@@ -87,6 +99,7 @@ def verify_chain_integrity(db: Session, workspace_id: str) -> dict:
             payload=block.payload
         )
 
+        # Detect modified block data
         if computed_hash != block.current_hash:
             return {
                 "status": "CORRUPTED",

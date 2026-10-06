@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from app.db import get_db
+from app.services.ledger_service import append_to_ledger
 from app.models.user import User, RoleEnum
 from app.models.problem import Problem, ProblemScoping
 from app.core.auth import get_current_user, require_roles
