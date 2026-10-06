@@ -27,7 +27,22 @@ class Workspace(Base):
     # Relationships
     logs = relationship("WorkspaceLog", back_populates="workspace", cascade="all, delete-orphan")
     ledger_blocks = relationship("LedgerBlock", back_populates="workspace", cascade="all, delete-orphan")
+    members = relationship(
+        "WorkspaceMember",
+        back_populates="workspace",
+        cascade="all, delete-orphan"
+    )
+class WorkspaceMember(Base):
+    __tablename__ = "workspace_members"
 
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    workspace_id = Column(String, ForeignKey("workspaces.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    role = Column(String, nullable=False, default="member")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    workspace = relationship("Workspace", back_populates="members")
+    user = relationship("User")
 
 class WorkspaceLog(Base):
     """Activity stream capturing raw workspace updates, AI executions, and file changes."""
@@ -48,8 +63,14 @@ class LedgerBlock(Base):
     """Immutable Cryptographic Block representation for the hash-chained ledger."""
     __tablename__ = "ledger_blocks"
 
-    index = Column(Integer, primary_key=True, index=True)
-    block_id = Column(String, unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    index = Column(Integer, nullable=False, index=True)
+    block_id = Column(
+    String,
+    primary_key=True,
+    unique=True,
+    nullable=False,
+    default=lambda: str(uuid.uuid4())
+)
     workspace_id = Column(String, ForeignKey("workspaces.id"), nullable=False, index=True)
 
     actor_type = Column(String, nullable=False)  # 'human' | 'ai_agent' | 'system'

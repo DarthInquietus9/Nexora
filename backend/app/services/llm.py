@@ -1,12 +1,18 @@
 import os
-import json
+from dotenv import load_dotenv
 from pydantic import BaseModel
-import google.generativeai as genai
+from google import genai
 
-# Setup Gemini API key
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+load_dotenv()
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+if not GEMINI_API_KEY:
+    raise RuntimeError("GEMINI_API_KEY is not configured")
+
+
+client = genai.Client(api_key=GEMINI_API_KEY)
+
 
 class ScopingResult(BaseModel):
     summary: str
@@ -14,35 +20,58 @@ class ScopingResult(BaseModel):
     deliverables: list[str]
     estimated_complexity: str
 
+
 def generate_ai_scoping(title: str, description: str) -> ScopingResult:
+
     prompt = f"""
-    You are an expert technical product manager. Analyze the following project request and break it down into a technical scope.
+You are an expert technical project scoping AI agent.
 
-    Project Title: {title}
-    Project Description: {description}
+Analyze the following research/project problem.
 
-    Provide your response STRICTLY as a JSON object with this exact structure:
-    {{
-        "summary": "Concise 2-sentence summary of the core goal",
-        "tech_stack": ["Tech1", "Tech2", "Tech3"],
-        "deliverables": ["Deliverable 1", "Deliverable 2"],
-        "estimated_complexity": "Low" | "Medium" | "High"
-    }}
-    """
+Project Title:
+{title}
+
+Project Description:
+{description}
+
+Return ONLY a valid JSON object with exactly these fields:
+
+{{
+    "summary": "A concise 2-3 sentence summary of the project goal",
+    "tech_stack": ["technology 1", "technology 2", "technology 3"],
+    "deliverables": ["deliverable 1", "deliverable 2", "deliverable 3"],
+    "estimated_complexity": "Low"
+}}
+
+The estimated_complexity value must be exactly one of:
+Low, Medium, High
+"""
 
     try:
-        model = genai.GenerativeModel("gemini-3.5-flash")
-        response = model.generate_content(
-            prompt,
-            generation_config={"response_mime_type": "application/json"}
+        response = client.models.generate_content(
+            model="gemini-3.5-flash-lite",
+            contents=prompt,
+            config={
+                "response_mime_type": "application/json"
+            }
         )
-        data = json.loads(response.text)
-        return ScopingResult(**data)
+
+        return ScopingResult.model_validate_json(response.text)
+
     except Exception as e:
-        # Fallback response in case API keys are missing or invalid
+        print(f"AI scoping error: {e}")
+
         return ScopingResult(
-            summary=f"Automated scoping analysis for: {title}",
-            tech_stack=["Python", "FastAPI", "React", "PostgreSQL"],
-            deliverables=["Core API endpoints", "Frontend interface", "Database migration"],
+            summary=f"AI scoping analysis for: {title}",
+            tech_stack=[
+                "Python",
+                "FastAPI",
+                "React"
+            ],
+            deliverables=[
+                "Project scope",
+                "Technical implementation",
+                "Research deliverables"
+            ],
             estimated_complexity="Medium"
         )
